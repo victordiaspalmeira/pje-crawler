@@ -3,12 +3,13 @@ from pprint import pprint
 db = TinyDB('processos.db')
 import pandas as pd 
 
-df = pd.read_csv('ELEIÇÕES 2022 - ANDAMENTO PROCESSUAL  - 15.09.2022.csv')
+df = pd.read_csv('19_09.csv')
+print(df.head())
 df['ANDAMENTO'] = ''
 print(df.columns)
 for item in db:
-    if item['proccess_number'] != '':
-        df.loc[df['PROCESSO'] == item['proccess_number'], 'ANDAMENTO'] = item['fase_atual']
+    if item['PROCCESS_NUMBER'] != '':
+        df.loc[df['PROCESSO'] == item['PROCCESS_NUMBER'], 'ANDAMENTO'] = item['LAST_ACTION']
 
 print(df.head(25))
-df.to_csv('updated.csv')
+df.to_csv('updated_19.csv')
