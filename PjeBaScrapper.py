@@ -7,9 +7,17 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.options import Options
 from utils import init_query_list, human_like_mouse_move
 import time 
 from tinydb import TinyDB
+
+import urllib
+from pydub import AudioSegment
+from pydub.playback import play
+
+import audio_transcript
+
 import chime
 chime.theme('zelda')
 
@@ -37,11 +45,7 @@ class PjeProccessScrapper():
         Returns:
             None
         """
-        if input("Have you checked for updates today?").upper() == 'Y':
-            pass
-        else:
-            print("Too bad.")
-            exit()
+
         # Load .env to environment variables
         load_dotenv()
 
@@ -55,6 +59,9 @@ class PjeProccessScrapper():
             'RECAPTCHA_BOX': os.environ.get('RECAPTCHA_BOX'),
             'CAPTCHA_IMAGE_BOX': os.environ.get('CAPTCHA_IMAGE_BOX'),
             'CAPTCHA_AUDIO_ICON': os.environ.get('CAPTCHA_AUDIO_ICON'),
+            'DOWNLOAD_ICON': os.environ.get('DOWNLOAD_ICON'),
+            'CAPTCHA_AUDIO_TEXT': os.environ.get('CAPTCHA_AUDIO_TEXT'),
+            'CAPTCHA_AUDIO_BUTTON': os.environ.get('CAPTCHA_AUDIO_BUTTON')
         }
 
         # Init identifiers for data related elements
@@ -73,7 +80,6 @@ class PjeProccessScrapper():
             driver.switch_to.frame(iframes[index])
             captcha_box = driver.find_element('xpath', self.xpath_input_ids['CAPTCHA_IMAGE_BOX'])
             detected = True
-            time.wait(600)
         except Exception as e:
             logging.info("Captcha not detected.")
 
@@ -82,9 +88,23 @@ class PjeProccessScrapper():
         return detected
 
     def _do_audio_captcha(self, driver, iframe):
-        driver.switch_to_frame(iframe)
+        logging.info("AUDIO CAPTCHA!!!!")
+        driver.switch_to.frame(iframe)
         audio_input = driver.find_element('xpath', self.xpath_input_ids['CAPTCHA_AUDIO_ICON'])
         audio_input.click()
+        download_input = driver.find_element('xpath', self.xpath_input_ids['DOWNLOAD_ICON'])
+
+        mp3file = urllib.request.urlopen(download_input.get_attribute('href'))
+        with open('captcha.mp3', 'wb') as audio_mp3:
+            audio_mp3.write(mp3file.read())
+        transcription = audio_transcript.transcript('captcha.mp3')
+
+        text_input = driver.find_element('xpath', self.xpath_input_ids['CAPTCHA_AUDIO_TEXT'])
+        text_input.send_keys(transcription)
+
+        button = driver.find_element('xpath', self.xpath_input_ids['CAPTCHA_AUDIO_BUTTON'])
+        button.click()
+        driver.switch_to.default_content()
 
     def _do_captcha_box(self, driver):
         logging.info("Checking for captcha box...")
@@ -124,10 +144,9 @@ class PjeProccessScrapper():
 
         if self._check_for_captcha(driver, 2):
             logging.info('Presearch captcha found.')
-            chime.error(True)
-            time.sleep(0.3)
-            time.sleep(6)
-
+            #chime.error(True)
+            self._do_audio_captcha(driver, 2)
+            #chime.success(True)
         else:
             logging.info('Presearch captcha not found. Carrying on.')
 
@@ -135,11 +154,10 @@ class PjeProccessScrapper():
         self._do_captcha_box(driver)
 
         if self._check_for_captcha(driver, 2):
-            logging.info('Presearch captcha found.')
-            chime.error(True)
-            time.sleep(0.5)
-            time.sleep(10)
-
+            logging.info('Postsearch captcha found.')
+            #chime.error(True)
+            self._do_audio_captcha(driver, 2)
+            #chime.success(True)
         else:
             pass
 
@@ -166,7 +184,9 @@ if __name__ == "__main__":
     logging.info('=========================================\n\n')
     logging.basicConfig(level=logging.WARNING)
     service = Service(GeckoDriverManager().install())
-    driver = webdriver.Firefox(service=service)
+    options = Options()
+    options.headless = True
+    driver = webdriver.Firefox(options=options, service=service)
 
     scrapper = PjeProccessScrapper()
 
@@ -175,7 +195,8 @@ if __name__ == "__main__":
             continue
         try:
             scrapper.run(driver, db, proccess_id.strip())
-        except:
+        except Exception as e:
+            print(e)
             driver.refresh()
             chime.warning(True)
             time.sleep(0.3)
